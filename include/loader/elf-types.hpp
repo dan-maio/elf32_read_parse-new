@@ -118,16 +118,80 @@ constexpr half EM_ARM = 40; ///< ARM architecture (0x28).
 constexpr word PT_LOAD = 1; ///< Loadable program segment.
 
 constexpr word SHT_REL   = 9; ///< Relocation section (Elf32_Rel entries).
+constexpr word SHF_WRITE = 1; ///< Section occupies writable memory.
 constexpr word SHF_ALLOC = 2; ///< Section occupies memory during execution.
+constexpr word SHT_INIT_ARRAY      = 14;        ///< Constructors.
+constexpr word SHT_ARM_EXIDX       = 0x70000001; ///< ARM exception index.
+constexpr word SHT_ARM_ATTRIBUTES  = 0x70000003; ///< ARM build attributes.
 
-/// @brief ARM REL relocation types the loader recognises.
+// ARM EABI flags (e_flags).
+constexpr word EF_ARM_EABIMASK       = 0xff000000; ///< EABI version mask.
+constexpr word EF_ARM_EABI_VER5      = 0x05000000; ///< EABI version 5.
+constexpr word EF_ARM_ABI_FLOAT_SOFT = 0x00000200; ///< Soft-float ABI.
+constexpr word EF_ARM_ABI_FLOAT_HARD = 0x00000400; ///< Hard-float ABI.
+constexpr word EF_ARM_BE8            = 0x00800000; ///< Big-endian instructions.
+constexpr word EF_ARM_LE8            = 0x00400000; ///< Little-endian instructions.
+
+/// @brief A symbol value is in Thumb state when bit 0 is set.
+constexpr bool is_thumb(std::uint32_t st_value) noexcept { return (st_value & 1u) != 0; }
+/// @brief A symbol value is in ARM state when bit 0 is clear.
+constexpr bool is_arm(std::uint32_t st_value) noexcept { return (st_value & 1u) == 0; }
+/// @brief Preserve a symbol's own ARM/Thumb bit (do not force Thumb).
+constexpr std::uint32_t code_addr(std::uint32_t st_value) noexcept { return st_value; }
+
+/// @brief ARM REL relocation types understood by the loader.
+///        The first six are the dynamic types; the rest cover A32/T32 static
+///        relocations emitted for ET_REL and no-pic images.
 enum class rel_type : std::uint8_t {
-    ABS32    = 2,  ///< R_ARM_ABS32 (e.g. constructor pointers).
-    REL32    = 3,  ///< R_ARM_REL32 (PC-relative 32-bit data reference).
-    COPY     = 20, ///< R_ARM_COPY (extern var defined in main).
-    GLOB_DAT = 21, ///< R_ARM_GLOB_DAT (global variable GOT slot).
-    JUMP_SLOT = 22, ///< R_ARM_JUMP_SLOT (function GOT/PLT slot).
-    RELATIVE = 23, ///< R_ARM_RELATIVE (base-relative local data).
+    NONE              = 0,   ///< R_ARM_NONE.
+    PC24              = 1,   ///< R_ARM_PC24 (legacy B/BL).
+    ABS32             = 2,   ///< R_ARM_ABS32.
+    REL32             = 3,   ///< R_ARM_REL32.
+    ABS16             = 5,   ///< R_ARM_ABS16.
+    ABS12             = 6,   ///< R_ARM_ABS12.
+    THM_ABS5          = 7,   ///< R_ARM_THM_ABS5.
+    ABS8              = 8,   ///< R_ARM_ABS8.
+    SBREL32           = 9,   ///< R_ARM_SBREL32.
+    THM_CALL          = 10,  ///< R_ARM_THM_CALL (T32 BL/BLX).
+    THM_PC8           = 11,  ///< R_ARM_THM_PC8.
+    TLS_DTPMOD32      = 17,  ///< TLS module id.
+    TLS_DTPOFF32      = 18,  ///< TLS block offset.
+    TLS_TPOFF32       = 19,  ///< TLS thread-pointer offset.
+    COPY              = 20,  ///< R_ARM_COPY.
+    GLOB_DAT          = 21,  ///< R_ARM_GLOB_DAT.
+    JUMP_SLOT         = 22,  ///< R_ARM_JUMP_SLOT.
+    RELATIVE          = 23,  ///< R_ARM_RELATIVE.
+    GOTOFF32          = 24,  ///< R_ARM_GOTOFF32.
+    BASE_PREL         = 25,  ///< R_ARM_BASE_PREL (GOT base - P).
+    GOT_BREL          = 26,  ///< R_ARM_GOT_BREL.
+    PLT32             = 27,  ///< R_ARM_PLT32 (legacy PLT BL).
+    CALL              = 28,  ///< R_ARM_CALL (BL/BLX).
+    JUMP24            = 29,  ///< R_ARM_JUMP24 (B).
+    THM_JUMP24        = 30,  ///< R_ARM_THM_JUMP24 (T32 B.W).
+    BASE_ABS          = 31,  ///< R_ARM_BASE_ABS.
+    TARGET1           = 38,  ///< R_ARM_TARGET1 (ABS32 on bare-metal).
+    SBREL31           = 39,  ///< R_ARM_SBREL31.
+    V4BX              = 40,  ///< R_ARM_V4BX (no-op on ARMv5+).
+    TARGET2           = 41,  ///< R_ARM_TARGET2 (REL32 on bare-metal).
+    PREL31            = 42,  ///< R_ARM_PREL31 (.ARM.exidx).
+    MOVW_ABS_NC       = 43,  ///< R_ARM_MOVW_ABS_NC.
+    MOVT_ABS          = 44,  ///< R_ARM_MOVT_ABS.
+    MOVW_PREL_NC      = 45,  ///< R_ARM_MOVW_PREL_NC.
+    MOVT_PREL         = 46,  ///< R_ARM_MOVT_PREL.
+    THM_MOVW_ABS_NC   = 47,  ///< R_ARM_THM_MOVW_ABS_NC.
+    THM_MOVT_ABS      = 48,  ///< R_ARM_THM_MOVT_ABS.
+    THM_MOVW_PREL_NC  = 49,  ///< R_ARM_THM_MOVW_PREL_NC.
+    THM_MOVT_PREL     = 50,  ///< R_ARM_THM_MOVT_PREL.
+    THM_JUMP19        = 51,  ///< R_ARM_THM_JUMP19.
+    THM_JUMP6         = 52,  ///< R_ARM_THM_JUMP6.
+    THM_ALU_PREL_11_0 = 53,  ///< R_ARM_THM_ALU_PREL_11_0.
+    THM_PC12          = 54,  ///< R_ARM_THM_PC12.
+    ABS32_NOI         = 55,  ///< R_ARM_ABS32_NOI.
+    REL32_NOI         = 56,  ///< R_ARM_REL32_NOI.
+    GOT_PREL          = 96,  ///< R_ARM_GOT_PREL.
+    THM_PC11          = 102, ///< R_ARM_THM_PC11.
+    THM_PC9           = 103, ///< R_ARM_THM_PC9.
+    IRELATIVE         = 160, ///< R_ARM_IRELATIVE.
 };
 
 /// @brief Symbol binding (high nibble of st_info).

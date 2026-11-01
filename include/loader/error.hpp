@@ -19,6 +19,9 @@ enum class error {
     BAD_SECTION,       ///< Required section missing or malformed.
     SYMBOL_NOT_FOUND,  ///< Hash lookup did not find the requested name.
     UNSUPPORTED_RELOC, ///< Relocation type the loader does not implement.
+    ABI_MISMATCH,      ///< Hard/soft float, EABI, or CPU profile mismatch.
+    RELOC_OVERFLOW,    ///< Branch or MOVW target outside the encodable range.
+    RELOC_INTERWORK,   ///< A B/B.W cannot switch ARM/Thumb state; a veneer is needed.
     OUT_OF_MEMORY,     ///< A fixed-capacity container overflowed.
 };
 

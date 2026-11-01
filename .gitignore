@@ -6,3 +6,6 @@ build/
 
 # Compiled host tools
 tools/elf2json
+
+# Out-of-tree test builds
+build*/

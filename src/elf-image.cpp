@@ -37,6 +37,22 @@ result<elf_image> elf_image::parse(byte_source& src) noexcept {
         h.e_machine != elf::EM_ARM)
         return loader::unexpected(error::NOT_ARM32);
 
+    // A32/T32 support: reject the two encodings this reader cannot represent,
+    // and require the EABI version the relocation types below belong to.
+    if ((h.e_flags & elf::EF_ARM_EABIMASK) != elf::EF_ARM_EABI_VER5)
+        return loader::unexpected(error::ABI_MISMATCH);
+    if (h.e_flags & elf::EF_ARM_BE8)
+        return loader::unexpected(error::ABI_MISMATCH);
+
+    if (h.e_ehsize != sizeof(elf::Ehdr))
+        return loader::unexpected(error::BAD_SECTION);
+    if (h.e_phnum != 0 && h.e_phentsize != sizeof(elf::Phdr))
+        return loader::unexpected(error::BAD_SECTION);
+    if (h.e_shnum != 0 && h.e_shentsize != sizeof(elf::Shdr))
+        return loader::unexpected(error::BAD_SECTION);
+    if (h.e_shnum != 0 && h.e_shstrndx >= h.e_shnum)
+        return loader::unexpected(error::BAD_SECTION);
+
     return elf_image(src, h);
 }
 
@@ -83,15 +99,16 @@ result<std::uint32_t> elf_image::image_size() const noexcept {
     // the highest PT_LOAD end address, NOT the sum of segment sizes: segments may be
     // page-aligned with gaps between them (e.g. libcppsh: code at 0, data at 0x14b0).
     // Summing filesz under-sizes the buffer and corrupts vaddr-based relocation.
-    std::uint32_t high = 0; // 32-bit (fixes the original uint16_t overflow bug)
+    std::uint64_t high = 0;
     for (elf::half i = 0; i < ehdr_.e_phnum; ++i) {
         elf::Phdr ph{};
         if (auto r = program_header(i, ph); !r) return loader::unexpected(r.err());
         if (ph.p_type != elf::PT_LOAD) continue;
-        const std::uint32_t end = ph.p_vaddr + ph.p_memsz; // segment's end in memory
+        const std::uint64_t end = std::uint64_t(ph.p_vaddr) + ph.p_memsz; // no 32-bit wrap
         if (end > high) high = end;
     }
-    return high;
+    if (high > 0xffffffffu) return loader::unexpected(error::BAD_SECTION);
+    return static_cast<std::uint32_t>(high);
 }
 
 result<std::uint32_t> elf_image::image_base() const noexcept {
@@ -113,6 +130,9 @@ result<std::vector<std::byte>> elf_image::collect_relocations() const noexcept {
         if (auto r = section_header(i, sh); !r) return loader::unexpected(r.err());
         if (sh.sh_type != elf::SHT_REL) continue;
         if (!(sh.sh_flags & elf::SHF_ALLOC)) continue;
+        if ((sh.sh_entsize != 0 && sh.sh_entsize != sizeof(elf::Rel)) ||
+            (sh.sh_size % sizeof(elf::Rel)) != 0)
+            continue;
         std::size_t pos = all.size();
         all.resize(pos + sh.sh_size);
         if (auto r = src_->read_at(sh.sh_offset, std::span<std::byte>(all.data() + pos, sh.sh_size)); !r)

@@ -28,3 +28,8 @@ configure_file(
     ${CMAKE_CURRENT_BINARY_DIR}/411ce-100Mhz.elf
     COPYONLY
 )
+
+# Host unit test for the A32/T32 relocation encoder (no ELF fixture needed).
+add_executable(arm-reloc-test arm-reloc-test.cpp)
+target_link_libraries(arm-reloc-test PRIVATE common-elf-reader::elf-reader)
+target_compile_features(arm-reloc-test PRIVATE cxx_std_20)
