@@ -48,7 +48,9 @@ echo "=== Fixture: ${FIXTURE} ==="
     -c "reset halt" \
     -c "resume" \
     -c "wait_halt 60000" \
-    -c "shutdown" 2>&1 ) | tee "${BUILD_DIR}/test-arm-output.txt"
+    -c "shutdown" 2>&1 ) | tee "${BUILD_DIR}/test-arm-output.txt" || true
+# OpenOCD exits non-zero on the expected wait_halt timeout; with pipefail that
+# would abort here, so the verdict below is taken from the output instead.
 
 # The test prints "N passed, M failed" via semihosting. The "timed out" from
 # wait_halt is expected (the test spins after exit). Check for "0 failed".
